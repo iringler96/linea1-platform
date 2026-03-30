@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+coverage/
+.vscode/
+.idea/
+*.log
+
+backend/node_modules/
+frontend/node_modules/
+
+postgres_data/
+db_data/
+
+.gitkeep
+
+# Si tienes bases locales o archivos temporales
+*.sqlite
+*.db
+*.pyc
+__pycache__/
