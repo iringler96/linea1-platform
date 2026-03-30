@@ -39,7 +39,10 @@ export async function fetchData<T>(endpoint: string): Promise<T> {
   return response.json();
 }
 
-export async function createData<T>(endpoint: string, payload: unknown): Promise<T> {
+export async function createData<T>(
+  endpoint: string,
+  payload: unknown
+): Promise<T> {
   const response = await fetch(`${API_URL}${endpoint}`, {
     method: "POST",
     headers: getHeaders(true),
@@ -50,7 +53,10 @@ export async function createData<T>(endpoint: string, payload: unknown): Promise
   return response.json();
 }
 
-export async function updateData<T>(endpoint: string, payload: unknown): Promise<T> {
+export async function updateData<T>(
+  endpoint: string,
+  payload: unknown
+): Promise<T> {
   const response = await fetch(`${API_URL}${endpoint}`, {
     method: "PUT",
     headers: getHeaders(true),

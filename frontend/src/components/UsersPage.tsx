@@ -1,8 +1,35 @@
 import { useEffect, useState } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Paper,
+  Snackbar,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { createData, deleteData, fetchData, updateData } from "../api";
 import type { User } from "../types";
 
-const emptyForm = {
+type UserForm = {
+  correo: string;
+  username: string;
+  password: string;
+  permisos: string;
+};
+
+const emptyForm: UserForm = {
   correo: "",
   username: "",
   password: "",
@@ -11,10 +38,12 @@ const emptyForm = {
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
-  const [form, setForm] = useState(emptyForm);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [message, setMessage] = useState("");
+  const [form, setForm] = useState<UserForm>(emptyForm);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [openForm, setOpenForm] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [error, setError] = useState("");
+  const [snackbar, setSnackbar] = useState("");
 
   async function loadUsers() {
     try {
@@ -29,49 +58,62 @@ export default function UsersPage() {
     loadUsers();
   }, []);
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  function handleOpenCreate() {
+    setEditingUser(null);
+    setForm(emptyForm);
+    setOpenForm(true);
+  }
+
+  function handleOpenEdit(user: User) {
+    setEditingUser(user);
+    setForm({
+      correo: user.correo || "",
+      username: user.username || "",
+      password: "",
+      permisos: user.permisos || "",
+    });
+    setOpenForm(true);
+  }
+
+  function handleCloseForm() {
+    setOpenForm(false);
+    setEditingUser(null);
+    setForm(emptyForm);
+  }
+
+  function handleChange(
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) {
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setMessage("");
     setError("");
 
     try {
-      if (editingId) {
-        await updateData(`/usuarios/${editingId}`, form);
-        setMessage("Usuario actualizado correctamente");
+      if (editingUser) {
+        await updateData(`/usuarios/${editingUser.id}`, form);
+        setSnackbar("Usuario actualizado correctamente");
       } else {
         await createData("/usuarios", form);
-        setMessage("Usuario creado correctamente");
+        setSnackbar("Usuario creado correctamente");
       }
 
-      setForm(emptyForm);
-      setEditingId(null);
+      handleCloseForm();
       loadUsers();
     } catch {
       setError("No se pudo guardar el usuario");
     }
   }
 
-  function handleEdit(user: User) {
-    setEditingId(user.id);
-    setForm({
-      correo: user.correo || "",
-      username: user.username || "",
-      password: user.password || "",
-      permisos: user.permisos || "",
-    });
-  }
-
-  async function handleDelete(id: number) {
-    const ok = window.confirm("¿Deseas eliminar este usuario?");
-    if (!ok) return;
+  async function handleDelete() {
+    if (!userToDelete) return;
 
     try {
-      await deleteData(`/usuarios/${id}`);
-      setMessage("Usuario eliminado correctamente");
+      await deleteData(`/usuarios/${userToDelete.id}`);
+      setSnackbar("Usuario eliminado correctamente");
+      setUserToDelete(null);
       loadUsers();
     } catch {
       setError("No se pudo eliminar el usuario");
@@ -79,112 +121,139 @@ export default function UsersPage() {
   }
 
   return (
-    <div>
-      <h1 className="page-title">Gestión de Usuarios</h1>
+    <>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        mb={3}
+      >
+        <Typography variant="h3">Usuarios</Typography>
+        <Button variant="contained" onClick={handleOpenCreate}>
+          Nuevo usuario
+        </Button>
+      </Stack>
 
-      <div className="card">
-        <form onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <div className="form-group col-6">
-              <label>Correo</label>
-              <input
-                name="correo"
-                value={form.correo}
-                onChange={handleChange}
-                placeholder="correo@ejemplo.cl"
-              />
-            </div>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
 
-            <div className="form-group col-6">
-              <label>Username</label>
-              <input
-                name="username"
-                value={form.username}
-                onChange={handleChange}
-                placeholder="Ingresa username"
-                required
-              />
-            </div>
-
-            <div className="form-group col-6">
-              <label>Password</label>
-              <input
-                name="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="Ingresa password"
-                required
-              />
-            </div>
-
-            <div className="form-group col-6">
-              <label>Permisos</label>
-              <input
-                name="permisos"
-                value={form.permisos}
-                onChange={handleChange}
-                placeholder="admin / operador"
-              />
-            </div>
-          </div>
-
-          <div className="actions">
-            <button className="btn btn-success" type="submit">
-              {editingId ? "Actualizar" : "Guardar"}
-            </button>
-
-            {editingId && (
-              <button
-                type="button"
-                className="btn btn-warning"
-                onClick={() => {
-                  setEditingId(null);
-                  setForm(emptyForm);
-                }}
-              >
-                Cancelar edición
-              </button>
-            )}
-          </div>
-        </form>
-
-        {message && <p className="message">{message}</p>}
-        {error && <p className="error">{error}</p>}
-      </div>
-
-      <div className="table-wrapper">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Correo</th>
-              <th>Username</th>
-              <th>Permisos</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>ID</TableCell>
+              <TableCell>Correo</TableCell>
+              <TableCell>Username</TableCell>
+              <TableCell>Permisos</TableCell>
+              <TableCell align="right">Acciones</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {users.map((user) => (
-              <tr key={user.id}>
-                <td>{user.id}</td>
-                <td>{user.correo}</td>
-                <td>{user.username}</td>
-                <td>{user.permisos}</td>
-                <td>
-                  <div className="row-actions">
-                    <button className="btn btn-warning" onClick={() => handleEdit(user)}>
+              <TableRow key={user.id}>
+                <TableCell>{user.id}</TableCell>
+                <TableCell>{user.correo}</TableCell>
+                <TableCell>{user.username}</TableCell>
+                <TableCell>{user.permisos}</TableCell>
+                <TableCell align="right">
+                  <Stack direction="row" spacing={1} justifyContent="flex-end">
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      onClick={() => handleOpenEdit(user)}
+                    >
                       Editar
-                    </button>
-                    <button className="btn btn-danger" onClick={() => handleDelete(user.id)}>
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="error"
+                      onClick={() => setUserToDelete(user)}
+                    >
                       Eliminar
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                    </Button>
+                  </Stack>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <Dialog open={openForm} onClose={handleCloseForm} fullWidth maxWidth="sm">
+        <Box component="form" onSubmit={handleSubmit}>
+          <DialogTitle>
+            {editingUser ? "Editar usuario" : "Nuevo usuario"}
+          </DialogTitle>
+          <DialogContent>
+            <TextField
+              name="correo"
+              label="Correo"
+              value={form.correo}
+              onChange={handleChange}
+            />
+            <TextField
+              name="username"
+              label="Username"
+              value={form.username}
+              onChange={handleChange}
+              required
+            />
+            <TextField
+              name="password"
+              label={editingUser ? "Nueva contraseña (opcional)" : "Contraseña"}
+              type="password"
+              value={form.password}
+              onChange={handleChange}
+              required={!editingUser}
+            />
+            <TextField
+              name="permisos"
+              label="Permisos"
+              value={form.permisos}
+              onChange={handleChange}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseForm}>Cancelar</Button>
+            <Button type="submit" variant="contained">
+              {editingUser ? "Guardar cambios" : "Crear"}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      <Dialog
+        open={!!userToDelete}
+        onClose={() => setUserToDelete(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Eliminar usuario</DialogTitle>
+        <DialogContent>
+          <Typography>
+            ¿Deseas eliminar a {userToDelete?.username}?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setUserToDelete(null)}>Cancelar</Button>
+          <Button variant="contained" color="error" onClick={handleDelete}>
+            Eliminar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={!!snackbar}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar("")}
+      >
+        <Alert severity="success" onClose={() => setSnackbar("")}>
+          {snackbar}
+        </Alert>
+      </Snackbar>
+    </>
   );
 }

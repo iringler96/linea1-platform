@@ -1,8 +1,41 @@
 import { useEffect, useState } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  Grid,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Snackbar,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { createData, deleteData, fetchData, updateData } from "../api";
-import type { Machine } from "../types";
+import type { Company, Machine } from "../types";
 
-const emptyForm = {
+type MachineForm = {
+  ppu: string;
+  anio: string;
+  nmaquina: string;
+  idempresa: string;
+  activa: string;
+};
+
+const emptyForm: MachineForm = {
   ppu: "",
   anio: "",
   nmaquina: "",
@@ -12,10 +45,13 @@ const emptyForm = {
 
 export default function MachinesPage() {
   const [machines, setMachines] = useState<Machine[]>([]);
-  const [form, setForm] = useState(emptyForm);
-  const [editingPpu, setEditingPpu] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [form, setForm] = useState<MachineForm>(emptyForm);
+  const [editingMachine, setEditingMachine] = useState<Machine | null>(null);
+  const [openForm, setOpenForm] = useState(false);
+  const [machineToDelete, setMachineToDelete] = useState<Machine | null>(null);
   const [error, setError] = useState("");
+  const [snackbar, setSnackbar] = useState("");
 
   async function loadMachines() {
     try {
@@ -26,17 +62,58 @@ export default function MachinesPage() {
     }
   }
 
+  async function loadCompanies() {
+    try {
+      const data = await fetchData<Company[]>("/empresas");
+      setCompanies(data);
+    } catch {
+      setError("No se pudieron cargar las empresas");
+    }
+  }
+
   useEffect(() => {
     loadMachines();
+    loadCompanies();
   }, []);
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  function getCompanyName(companyId: number | null) {
+    if (!companyId) return "-";
+    const company = companies.find((c) => c.id === companyId);
+    return company ? company.nombreempresa : companyId;
+  }
+
+  function handleOpenCreate() {
+    setEditingMachine(null);
+    setForm(emptyForm);
+    setOpenForm(true);
+  }
+
+  function handleOpenEdit(machine: Machine) {
+    setEditingMachine(machine);
+    setForm({
+      ppu: machine.ppu,
+      anio: machine.anio ? String(machine.anio) : "",
+      nmaquina: machine.nmaquina ? String(machine.nmaquina) : "",
+      idempresa: machine.idempresa ? String(machine.idempresa) : "",
+      activa: machine.activa || "si",
+    });
+    setOpenForm(true);
+  }
+
+  function handleCloseForm() {
+    setOpenForm(false);
+    setEditingMachine(null);
+    setForm(emptyForm);
+  }
+
+  function handleChange(
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) {
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setMessage("");
     setError("");
 
     const payload = {
@@ -48,45 +125,33 @@ export default function MachinesPage() {
     };
 
     try {
-      if (editingPpu) {
-        await updateData(`/maquinas/${editingPpu}`, {
+      if (editingMachine) {
+        await updateData(`/maquinas/${editingMachine.ppu}`, {
           anio: payload.anio,
           nmaquina: payload.nmaquina,
           idempresa: payload.idempresa,
           activa: payload.activa,
         });
-        setMessage("Máquina actualizada correctamente");
+        setSnackbar("Máquina actualizada correctamente");
       } else {
         await createData("/maquinas", payload);
-        setMessage("Máquina creada correctamente");
+        setSnackbar("Máquina creada correctamente");
       }
 
-      setForm(emptyForm);
-      setEditingPpu(null);
+      handleCloseForm();
       loadMachines();
     } catch {
       setError("No se pudo guardar la máquina");
     }
   }
 
-  function handleEdit(machine: Machine) {
-    setEditingPpu(machine.ppu);
-    setForm({
-      ppu: machine.ppu,
-      anio: machine.anio ? String(machine.anio) : "",
-      nmaquina: machine.nmaquina ? String(machine.nmaquina) : "",
-      idempresa: machine.idempresa ? String(machine.idempresa) : "",
-      activa: machine.activa || "si",
-    });
-  }
-
-  async function handleDelete(ppu: string) {
-    const ok = window.confirm("¿Deseas eliminar esta máquina?");
-    if (!ok) return;
+  async function handleDelete() {
+    if (!machineToDelete) return;
 
     try {
-      await deleteData(`/maquinas/${ppu}`);
-      setMessage("Máquina eliminada correctamente");
+      await deleteData(`/maquinas/${machineToDelete.ppu}`);
+      setSnackbar("Máquina eliminada correctamente");
+      setMachineToDelete(null);
       loadMachines();
     } catch {
       setError("No se pudo eliminar la máquina");
@@ -94,122 +159,189 @@ export default function MachinesPage() {
   }
 
   return (
-    <div>
-      <h1 className="page-title">Gestión de Máquinas</h1>
+    <>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        mb={3}
+      >
+        <Typography variant="h3">Máquinas</Typography>
+        <Button variant="contained" onClick={handleOpenCreate}>
+          Nueva máquina
+        </Button>
+      </Stack>
 
-      <div className="card">
-        <form onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <div className="form-group col-3">
-              <label>PPU</label>
-              <input
-                name="ppu"
-                value={form.ppu}
-                onChange={handleChange}
-                placeholder="ABCD12"
-                required
-                disabled={!!editingPpu}
-              />
-            </div>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
 
-            <div className="form-group col-3">
-              <label>Año</label>
-              <input
-                name="anio"
-                value={form.anio}
-                onChange={handleChange}
-                placeholder="2024"
-              />
-            </div>
-
-            <div className="form-group col-3">
-              <label>N° Máquina</label>
-              <input
-                name="nmaquina"
-                value={form.nmaquina}
-                onChange={handleChange}
-                placeholder="101"
-              />
-            </div>
-
-            <div className="form-group col-3">
-              <label>ID Empresa</label>
-              <input
-                name="idempresa"
-                value={form.idempresa}
-                onChange={handleChange}
-                placeholder="1"
-              />
-            </div>
-
-            <div className="form-group col-3">
-              <label>Activa</label>
-              <select name="activa" value={form.activa} onChange={handleChange}>
-                <option value="si">Sí</option>
-                <option value="no">No</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="actions">
-            <button className="btn btn-success" type="submit">
-              {editingPpu ? "Actualizar" : "Guardar"}
-            </button>
-
-            {editingPpu && (
-              <button
-                type="button"
-                className="btn btn-warning"
-                onClick={() => {
-                  setEditingPpu(null);
-                  setForm(emptyForm);
-                }}
-              >
-                Cancelar edición
-              </button>
-            )}
-          </div>
-        </form>
-
-        {message && <p className="message">{message}</p>}
-        {error && <p className="error">{error}</p>}
-      </div>
-
-      <div className="table-wrapper">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>PPU</th>
-              <th>Año</th>
-              <th>N° Máquina</th>
-              <th>ID Empresa</th>
-              <th>Activa</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>PPU</TableCell>
+              <TableCell>Año</TableCell>
+              <TableCell>N° Máquina</TableCell>
+              <TableCell>Empresa</TableCell>
+              <TableCell>Activa</TableCell>
+              <TableCell align="right">Acciones</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {machines.map((machine) => (
-              <tr key={machine.ppu}>
-                <td>{machine.ppu}</td>
-                <td>{machine.anio}</td>
-                <td>{machine.nmaquina}</td>
-                <td>{machine.idempresa}</td>
-                <td>{machine.activa}</td>
-                <td>
-                  <div className="row-actions">
-                    <button className="btn btn-warning" onClick={() => handleEdit(machine)}>
+              <TableRow key={machine.ppu}>
+                <TableCell>{machine.ppu}</TableCell>
+                <TableCell>{machine.anio}</TableCell>
+                <TableCell>{machine.nmaquina}</TableCell>
+                <TableCell>{getCompanyName(machine.idempresa)}</TableCell>
+                <TableCell>{machine.activa}</TableCell>
+                <TableCell align="right">
+                  <Stack direction="row" spacing={1} justifyContent="flex-end">
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      onClick={() => handleOpenEdit(machine)}
+                    >
                       Editar
-                    </button>
-                    <button className="btn btn-danger" onClick={() => handleDelete(machine.ppu)}>
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="error"
+                      onClick={() => setMachineToDelete(machine)}
+                    >
                       Eliminar
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                    </Button>
+                  </Stack>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <Dialog open={openForm} onClose={handleCloseForm} fullWidth maxWidth="md">
+        <Box component="form" onSubmit={handleSubmit}>
+          <DialogTitle>
+            {editingMachine ? "Editar máquina" : "Nueva máquina"}
+          </DialogTitle>
+          <DialogContent>
+            <Grid container spacing={2} sx={{ mt: 0.5 }}>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  name="ppu"
+                  label="PPU"
+                  value={form.ppu}
+                  onChange={handleChange}
+                  required
+                  disabled={!!editingMachine}
+                  fullWidth
+                />
+              </Grid>
+
+              <Grid item xs={12} md={3}>
+                <TextField
+                  name="anio"
+                  label="Año"
+                  value={form.anio}
+                  onChange={handleChange}
+                  fullWidth
+                />
+              </Grid>
+
+              <Grid item xs={12} md={3}>
+                <TextField
+                  name="nmaquina"
+                  label="N° Máquina"
+                  value={form.nmaquina}
+                  onChange={handleChange}
+                  fullWidth
+                />
+              </Grid>
+
+              <Grid item xs={12} md={3}>
+                <FormControl fullWidth>
+                  <InputLabel>Empresa</InputLabel>
+                  <Select
+                    value={form.idempresa}
+                    label="Empresa"
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        idempresa: String(e.target.value),
+                      }))
+                    }
+                  >
+                    <MenuItem value="">Sin empresa</MenuItem>
+                    {companies.map((company) => (
+                      <MenuItem key={company.id} value={String(company.id)}>
+                        {company.nombreempresa}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              <Grid item xs={12} md={3}>
+                <FormControl fullWidth>
+                  <InputLabel>Activa</InputLabel>
+                  <Select
+                    value={form.activa}
+                    label="Activa"
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        activa: String(e.target.value),
+                      }))
+                    }
+                  >
+                    <MenuItem value="si">Sí</MenuItem>
+                    <MenuItem value="no">No</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseForm}>Cancelar</Button>
+            <Button type="submit" variant="contained">
+              {editingMachine ? "Guardar cambios" : "Crear"}
+            </Button>
+          </DialogActions>
+        </Box>
+      </Dialog>
+
+      <Dialog
+        open={!!machineToDelete}
+        onClose={() => setMachineToDelete(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Eliminar máquina</DialogTitle>
+        <DialogContent>
+          <Typography>
+            ¿Deseas eliminar la máquina {machineToDelete?.ppu}?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMachineToDelete(null)}>Cancelar</Button>
+          <Button variant="contained" color="error" onClick={handleDelete}>
+            Eliminar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={!!snackbar}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar("")}
+      >
+        <Alert severity="success" onClose={() => setSnackbar("")}>
+          {snackbar}
+        </Alert>
+      </Snackbar>
+    </>
   );
 }
