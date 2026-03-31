@@ -13,9 +13,10 @@ import CompaniesPage from "./components/CompaniesPage";
 import UsersPage from "./components/UsersPage";
 import ExpeditionsPage from "./components/ExpeditionsPage";
 import LoginPage from "./components/LoginPage";
+import BipayPage from "./components/BipayPage";
 import type { AuthUser } from "./types";
 
-type View = "machines" | "companies" | "users" | "expeditions";
+type View = "machines" | "companies" | "users" | "expeditions" | "bipay";
 
 export default function App() {
   const [view, setView] = useState<View>("machines");
@@ -60,6 +61,9 @@ export default function App() {
             <Button color="inherit" onClick={() => setView("machines")}>
               MAQUINAS
             </Button>
+            <Button color="inherit" onClick={() => setView("bipay")}>
+              BIPAY
+            </Button>
             <Button color="inherit" onClick={() => setView("companies")}>
               EMPRESAS
             </Button>
@@ -80,6 +84,7 @@ export default function App() {
 
       <Container maxWidth="xl" sx={{ py: 5 }}>
         {view === "machines" && <MachinesPage />}
+        {view === "bipay" && <BipayPage />}
         {view === "companies" && <CompaniesPage />}
         {view === "users" && <UsersPage />}
         {view === "expeditions" && <ExpeditionsPage />}

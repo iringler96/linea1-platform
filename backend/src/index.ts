@@ -2,11 +2,14 @@ import express, { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import multer from "multer";
+import XLSX from "xlsx";
 import { pool } from "./db";
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET || "clave_super_secreta";
+const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(cors());
 app.use(express.json());
@@ -50,9 +53,7 @@ app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "Backend funcionando correctamente" });
 });
 
-/* =========================
-   LOGIN
-========================= */
+/* LOGIN */
 
 app.post("/login", async (req: Request, res: Response) => {
   try {
@@ -100,9 +101,7 @@ app.post("/login", async (req: Request, res: Response) => {
   }
 });
 
-/* =========================
-   USUARIOS
-========================= */
+/* USUARIOS */
 
 app.get("/usuarios", authMiddleware, async (_req: Request, res: Response) => {
   try {
@@ -119,7 +118,6 @@ app.get("/usuarios", authMiddleware, async (_req: Request, res: Response) => {
 app.post("/usuarios", authMiddleware, async (req: Request, res: Response) => {
   try {
     const { correo, username, password, permisos } = req.body;
-
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const result = await pool.query(
@@ -194,9 +192,7 @@ app.delete("/usuarios/:id", authMiddleware, async (req: Request, res: Response) 
   }
 });
 
-/* =========================
-   EMPRESAS
-========================= */
+/* EMPRESAS */
 
 app.get("/empresas", authMiddleware, async (_req: Request, res: Response) => {
   try {
@@ -270,9 +266,7 @@ app.delete("/empresas/:id", authMiddleware, async (req: Request, res: Response) 
   }
 });
 
-/* =========================
-   MAQUINAS
-========================= */
+/* MAQUINAS */
 
 app.get("/maquinas", authMiddleware, async (_req: Request, res: Response) => {
   try {
@@ -348,9 +342,7 @@ app.delete("/maquinas/:ppu", authMiddleware, async (req: Request, res: Response)
   }
 });
 
-/* =========================
-   EXPEDICIONES
-========================= */
+/* EXPEDICIONES */
 
 app.get("/expediciones", authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -378,6 +370,167 @@ app.get("/expediciones", authMiddleware, async (req: Request, res: Response) => 
     res.status(500).json({ error: "Error al obtener expediciones" });
   }
 });
+
+/* BIPAY CONSULTA */
+
+app.get("/bipay", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { ppu, fechaInicio, fechaFin } = req.query;
+
+    if (!ppu) {
+      return res.status(400).json({ error: "La máquina es obligatoria" });
+    }
+
+    const conditions: string[] = ["ppu = $1"];
+    const values: unknown[] = [ppu];
+    let idx = 2;
+
+    if (fechaInicio) {
+      conditions.push(`fecha >= $${idx++}`);
+      values.push(fechaInicio);
+    }
+
+    if (fechaFin) {
+      conditions.push(`fecha <= $${idx++}`);
+      values.push(fechaFin);
+    }
+
+    const whereClause = conditions.join(" AND ");
+
+    const rowsResult = await pool.query(
+      `SELECT *
+       FROM tb_bipay
+       WHERE ${whereClause}
+       ORDER BY fecha DESC`,
+      values
+    );
+
+    const chartResult = await pool.query(
+      `SELECT fecha::text as fecha, COALESCE(totalusos, 0) as total
+       FROM tb_bipay
+       WHERE ${whereClause}
+       ORDER BY fecha ASC`,
+      values
+    );
+
+    const summaryResult = await pool.query(
+      `SELECT
+          COALESCE(SUM(totalusos), 0) as total_recaudado,
+          COUNT(*) as dias_con_datos
+       FROM tb_bipay
+       WHERE ${whereClause}`,
+      values
+    );
+
+    res.json({
+      summary: {
+        totalRecaudado: Number(summaryResult.rows[0].total_recaudado || 0),
+        diasConDatos: Number(summaryResult.rows[0].dias_con_datos || 0),
+        maquina: ppu,
+      },
+      chart: chartResult.rows.map((row) => ({
+        fecha: row.fecha,
+        total: Number(row.total || 0),
+      })),
+      rows: rowsResult.rows,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error al consultar BIPAY" });
+  }
+});
+
+/* BIPAY CARGA EXCEL */
+
+app.post(
+  "/bipay/upload",
+  authMiddleware,
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No se recibió archivo" });
+      }
+
+      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+
+      let inserted = 0;
+      let updated = 0;
+
+      for (const row of rows) {
+        const fecha = row["Fecha"] ? String(row["Fecha"]).trim() : null;
+        const ppu = row["Patente"] ? String(row["Patente"]).trim().toUpperCase() : null;
+
+        if (!fecha || !ppu) continue;
+
+        const cantTransaccionesN = Number(row["Transacciones Normales"] || 0);
+        const cantTransaccionesEMV = Number(row["Transacciones EMV"] || 0);
+        const usosNormales = Number(row["Usos Normales"] || 0);
+        const usosEMV = Number(row["Usos EMV"] || 0);
+        const totalTransacciones = Number(row["Total Transacciones"] || 0);
+        const totalUsos = Number(row["Total Usos"] || 0);
+
+        const exists = await pool.query(
+          `SELECT 1 FROM tb_bipay WHERE ppu = $1 AND fecha = $2`,
+          [ppu, fecha]
+        );
+
+        if (exists.rows.length > 0) {
+          await pool.query(
+            `UPDATE tb_bipay
+             SET canttransaccionesn = $3,
+                 canttransaccionesemv = $4,
+                 usosnormales = $5,
+                 usosemv = $6,
+                 totaltransacciones = $7,
+                 totalusos = $8
+             WHERE ppu = $1 AND fecha = $2`,
+            [
+              ppu,
+              fecha,
+              cantTransaccionesN,
+              cantTransaccionesEMV,
+              usosNormales,
+              usosEMV,
+              totalTransacciones,
+              totalUsos,
+            ]
+          );
+          updated++;
+        } else {
+          await pool.query(
+            `INSERT INTO tb_bipay
+              (ppu, fecha, canttransaccionesn, canttransaccionesemv, usosnormales, usosemv, totaltransacciones, totalusos)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              ppu,
+              fecha,
+              cantTransaccionesN,
+              cantTransaccionesEMV,
+              usosNormales,
+              usosEMV,
+              totalTransacciones,
+              totalUsos,
+            ]
+          );
+          inserted++;
+        }
+      }
+
+      res.json({
+        message: "Archivo BIPAY procesado correctamente",
+        inserted,
+        updated,
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Error al procesar el archivo Excel" });
+    }
+  }
+);
 
 app.listen(PORT, () => {
   console.log(`Servidor backend corriendo en puerto ${PORT}`);

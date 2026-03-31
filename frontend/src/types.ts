@@ -35,3 +35,31 @@ export type Expedition = {
   sentido: string | null;
   validez: string | null;
 };
+
+export type BipayRow = {
+  ppu: string;
+  fecha: string;
+  canttransaccionesn: number | null;
+  canttransaccionesemv: number | null;
+  usosnormales: number | null;
+  usosemv: number | null;
+  totaltransacciones: number | null;
+  totalusos: number | null;
+};
+
+export type BipaySummary = {
+  totalRecaudado: number;
+  diasConDatos: number;
+  maquina: string;
+};
+
+export type BipayChartRow = {
+  fecha: string;
+  total: number;
+};
+
+export type BipayResponse = {
+  summary: BipaySummary;
+  chart: BipayChartRow[];
+  rows: BipayRow[];
+};

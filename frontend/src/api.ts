@@ -75,3 +75,19 @@ export async function deleteData(endpoint: string): Promise<void> {
 
   if (!response.ok) throw new Error("Error al eliminar datos");
 }
+
+export async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const token = getToken();
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  if (!response.ok) throw new Error("Error al subir archivo");
+  return response.json();
+}
