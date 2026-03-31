@@ -7,7 +7,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Snackbar,
   Stack,
   Table,
@@ -33,8 +37,10 @@ const emptyForm: UserForm = {
   correo: "",
   username: "",
   password: "",
-  permisos: "",
+  permisos: "empresario",
 };
+
+const permissionOptions = ["admin", "empresario", "admin linea"];
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -70,7 +76,7 @@ export default function UsersPage() {
       correo: user.correo || "",
       username: user.username || "",
       password: "",
-      permisos: user.permisos || "",
+      permisos: user.permisos || "empresario",
     });
     setOpenForm(true);
   }
@@ -81,7 +87,7 @@ export default function UsersPage() {
     setForm(emptyForm);
   }
 
-  function handleChange(
+  function handleTextChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -187,35 +193,53 @@ export default function UsersPage() {
           <DialogTitle>
             {editingUser ? "Editar usuario" : "Nuevo usuario"}
           </DialogTitle>
+
           <DialogContent>
             <TextField
               name="correo"
               label="Correo"
               value={form.correo}
-              onChange={handleChange}
+              onChange={handleTextChange}
             />
+
             <TextField
               name="username"
               label="Username"
               value={form.username}
-              onChange={handleChange}
+              onChange={handleTextChange}
               required
             />
+
             <TextField
               name="password"
               label={editingUser ? "Nueva contraseña (opcional)" : "Contraseña"}
               type="password"
               value={form.password}
-              onChange={handleChange}
+              onChange={handleTextChange}
               required={!editingUser}
             />
-            <TextField
-              name="permisos"
-              label="Permisos"
-              value={form.permisos}
-              onChange={handleChange}
-            />
+
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Permisos</InputLabel>
+              <Select
+                value={form.permisos}
+                label="Permisos"
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    permisos: String(e.target.value),
+                  }))
+                }
+              >
+                {permissionOptions.map((permiso) => (
+                  <MenuItem key={permiso} value={permiso}>
+                    {permiso}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </DialogContent>
+
           <DialogActions>
             <Button onClick={handleCloseForm}>Cancelar</Button>
             <Button type="submit" variant="contained">
